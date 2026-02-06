@@ -10,7 +10,6 @@ from reccmp.compare.functions import (
     EntityCompareResult,
     create_valid_addr_lookup,
 )
-from reccmp.compare.asm.parse import AsmLine
 from reccmp.compare.lines import LinesDb
 from reccmp.types import EntityType, ImageId
 from .raw_image import RawImage
@@ -213,33 +212,20 @@ def test_encoding_mismatch_only_still_emits_diff_opcode(
     ]
 
 
-def test_encoding_mismatch_same_byte_length_is_ignored():
-    codes = [("equal", 0, 1, 0, 1)]
-    orig_asm = [
-        AsmLine(
-            address=0x200,
-            text="mov eax, ebx",
-            raw_bytes=b"\x89\xd8",
-            mnemonic="mov",
-            op_str="eax, ebx",
-        )
-    ]
-    recomp_asm = [
-        AsmLine(
-            address=0x400,
-            text="mov eax, ebx",
-            raw_bytes=b"\x8b\xc3",
-            mnemonic="mov",
-            op_str="eax, ebx",
-        )
-    ]
+def test_encoding_mismatch_same_byte_length_is_ignored(
+    db: EntityDb, lines_db: LinesDb, report: ReccmpReportProtocol
+):
+    # Both are 5-byte relative calls; targets differ but are sanitized to placeholders.
+    # This confirms same-size encoding differences do not become synthetic "enc" diffs.
+    orig = b"\xe8\x10\x00\x00\x00"
+    recm = b"\xe8\x20\x00\x00\x00"
 
-    notes, pairs = FunctionComparator._collect_encoding_mismatch_notes(
-        codes, orig_asm, recomp_asm
-    )
+    diffreport = compare_functions(db, lines_db, orig, recm, report)
 
-    assert notes == {}
-    assert pairs == []
+    assert diffreport.match_ratio == 1.0
+    assert diffreport.diff.codes == [("equal", 0, 1, 0, 1)]
+    assert diffreport.diff.orig_inst == [("0x200", "call <OFFSET1>")]
+    assert diffreport.diff.recomp_inst == [("0x400", "call <OFFSET1>")]
 
 
 # Based on BETA10 0x1013e673

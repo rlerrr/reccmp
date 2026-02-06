@@ -319,6 +319,8 @@ class FunctionComparator:
                     orig_line.raw_bytes is None
                     or recomp_line.raw_bytes is None
                     or orig_line.raw_bytes == recomp_line.raw_bytes
+                    # Ignore anyway if the encoding is the same length
+                    # Otherwise gets very noisy if the binaries aren't perfectly aligned!
                     or len(orig_line.raw_bytes) == len(recomp_line.raw_bytes)
                 ):
                     continue
