@@ -7,13 +7,24 @@ so that virtual addresses are replaced by symbol name or a generic
 placeholder string."""
 
 import re
+from dataclasses import dataclass
 from functools import cache
 from typing_extensions import Buffer
 from .const import JUMP_MNEMONICS, SINGLE_OPERAND_INSTS
 from .instgen import DisasmLiteTuple, InstructGen, SectionType
 from .replacement import AddrTestProtocol, NameReplacementProtocol
 
-AsmExcerpt = list[tuple[int | None, str]]
+@dataclass
+class AsmLine:
+    address: int | None
+    text: str
+    raw_bytes: bytes | None = None
+    mnemonic: str | None = None
+    op_str: str | None = None
+
+
+AsmExcerpt = list[AsmLine]
+LegacyAsmExcerpt = list[tuple[int | None, str]]
 
 ptr_replace_regex = re.compile(r"(?<=\[)(0x[0-9a-f]+)(?=\])")
 
@@ -193,11 +204,12 @@ class ParseAsm:
 
         return (inst_mnemonic, op_str)
 
-    def parse_asm(self, data: Buffer, start_addr: int) -> AsmExcerpt:
+    def parse_asm_lines(self, data: Buffer, start_addr: int) -> AsmExcerpt:
         self.reset()
         asm: AsmExcerpt = []
 
-        ig = InstructGen(bytes(data), start_addr, self.is_32bit)
+        data_bytes = bytes(data)
+        ig = InstructGen(data_bytes, start_addr, self.is_32bit)
 
         for section in ig.sections:
             if section.type == SectionType.CODE:
@@ -222,21 +234,38 @@ class ParseAsm:
                         result = (inst_mnemonic, inst_op_str)
 
                     # mnemonic + " " + op_str
-                    asm.append((inst_address, " ".join(result)))
+                    offset = inst_address - start_addr
+                    asm.append(
+                        AsmLine(
+                            address=inst_address,
+                            text=" ".join(result),
+                            raw_bytes=data_bytes[offset : offset + inst_size],
+                            mnemonic=inst_mnemonic,
+                            op_str=inst_op_str,
+                        )
+                    )
             elif section.type == SectionType.ADDR_TAB:
-                asm.append((None, "Jump table:"))
+                asm.append(AsmLine(address=None, text="Jump table:"))
                 for ofs, target in section.contents:
                     # Jumps in jump tables are absolute, which can lead to false positives
                     # when the function does not have the same address in orig and recomp.
                     # Therefore, we compute where the jump will go relative to the start of the function.
                     target_relative_to_function_start = target - start_addr
                     asm.append(
-                        (ofs, f"start + 0x{(target_relative_to_function_start):x}")
+                        AsmLine(
+                            address=ofs,
+                            text=f"start + 0x{(target_relative_to_function_start):x}",
+                        )
                     )
 
             elif section.type == SectionType.DATA_TAB:
-                asm.append((None, "Data table:"))
+                asm.append(AsmLine(address=None, text="Data table:"))
                 for ofs, b in section.contents:
-                    asm.append((ofs, hex(b)))
+                    asm.append(AsmLine(address=ofs, text=hex(b)))
 
         return asm
+
+    def parse_asm(self, data: Buffer, start_addr: int) -> LegacyAsmExcerpt:
+        """Backward-compatible API used by sanitize tests and simple callers."""
+        asm = self.parse_asm_lines(data, start_addr)
+        return [(line.address, line.text) for line in asm]
