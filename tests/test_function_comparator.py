@@ -10,6 +10,7 @@ from reccmp.compare.functions import (
     EntityCompareResult,
     create_valid_addr_lookup,
 )
+from reccmp.compare.asm.parse import AsmLine
 from reccmp.compare.lines import LinesDb
 from reccmp.types import EntityType, ImageId
 from .raw_image import RawImage
@@ -210,6 +211,35 @@ def test_encoding_mismatch_only_still_emits_diff_opcode(
     assert diffreport.diff.recomp_inst == [
         ("0x400", "shr eax, 1 [enc d1 e8 -> c1 e8 01]")
     ]
+
+
+def test_encoding_mismatch_same_byte_length_is_ignored():
+    codes = [("equal", 0, 1, 0, 1)]
+    orig_asm = [
+        AsmLine(
+            address=0x200,
+            text="mov eax, ebx",
+            raw_bytes=b"\x89\xd8",
+            mnemonic="mov",
+            op_str="eax, ebx",
+        )
+    ]
+    recomp_asm = [
+        AsmLine(
+            address=0x400,
+            text="mov eax, ebx",
+            raw_bytes=b"\x8b\xc3",
+            mnemonic="mov",
+            op_str="eax, ebx",
+        )
+    ]
+
+    notes, pairs = FunctionComparator._collect_encoding_mismatch_notes(
+        codes, orig_asm, recomp_asm
+    )
+
+    assert notes == {}
+    assert pairs == []
 
 
 # Based on BETA10 0x1013e673

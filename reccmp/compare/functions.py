@@ -321,6 +321,7 @@ class FunctionComparator:
                     orig_line.raw_bytes is None
                     or recomp_line.raw_bytes is None
                     or orig_line.raw_bytes == recomp_line.raw_bytes
+                    or len(orig_line.raw_bytes) == len(recomp_line.raw_bytes)
                 ):
                     continue
 
