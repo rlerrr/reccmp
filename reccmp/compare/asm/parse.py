@@ -14,6 +14,7 @@ from .const import JUMP_MNEMONICS, SINGLE_OPERAND_INSTS
 from .instgen import DisasmLiteTuple, InstructGen, SectionType
 from .replacement import AddrTestProtocol, NameReplacementProtocol
 
+
 @dataclass
 class AsmLine:
     address: int | None

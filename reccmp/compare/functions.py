@@ -205,8 +205,8 @@ class FunctionComparator:
             is_effective = False
 
         base_codes = diff.get_opcodes()
-        encoding_mismatch_notes, encoding_mismatch_pairs = self._collect_encoding_mismatch_notes(
-            base_codes, orig, recomp
+        encoding_mismatch_notes, encoding_mismatch_pairs = (
+            self._collect_encoding_mismatch_notes(base_codes, orig, recomp)
         )
         codes = self._inject_encoding_mismatch_opcodes(
             base_codes, encoding_mismatch_pairs
@@ -251,9 +251,7 @@ class FunctionComparator:
         if len(mismatch_pairs) == 0:
             return codes
 
-        mismatch_by_orig = {
-            orig_idx: recomp_idx for orig_idx, recomp_idx in mismatch_pairs
-        }
+        mismatch_by_orig = dict(mismatch_pairs)
         patched: list[DiffOpcode] = []
 
         for code, i1, i2, j1, j2 in codes:
