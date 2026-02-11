@@ -322,7 +322,7 @@ def match_static_variables(
             if matched_addr is None and function_name is not None:
                 fallback_symbol = f"{variable_name}___{function_name}"
                 for recomp_addr, recomp_sym in symbols.items():
-                    if fallback_symbol in recomp_sym:
+                    if fallback_symbol == recomp_sym:
                         matched_addr = recomp_addr
                         break
 
