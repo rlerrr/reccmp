@@ -67,6 +67,16 @@ def test_ignore_columns():
     assert values == [(0x1000, {"symbol": "hello"})]
 
 
+def test_orig_size():
+    """Should parse orig_size as an integer."""
+    values = list(csv_parse(dedent("""\
+        address|size|orig_size
+        1000|30|40
+    """)))
+
+    assert values == [(0x1000, {"size": 30, "orig_size": 40})]
+
+
 def test_address_not_hex():
     """Raise an exception if we cannot parse the address on one of the rows."""
     with pytest.raises(CsvInvalidAddressError):

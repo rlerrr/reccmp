@@ -76,6 +76,23 @@ def test_load_csv(db: EntityDb):
     assert entity.get("name") == "hello"
 
 
+def test_load_csv_orig_size(db: EntityDb):
+    """Should persist orig_size from the CSV row."""
+    csv_file = TextFile(
+        PurePath("test.csv"),
+        dedent("""\
+            address,size,orig_size
+            0x1234,10,20
+        """),
+    )
+
+    load_csv(db, csv_file)
+
+    entity = db.get_by_orig(0x1234)
+    assert entity is not None
+    assert entity.size(ImageId.ORIG) == 20
+
+
 def test_load_csv_overwrite(db: EntityDb):
     """Should overwrite (additively) if the same address is used in multiple CSV files."""
     csv_files = (
