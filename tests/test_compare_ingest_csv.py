@@ -88,7 +88,7 @@ def test_load_csv_orig_size(db: EntityDb):
 
     load_csv(db, csv_file)
 
-    entity = db.get_by_orig(0x1234)
+    entity = db.get(ImageId.ORIG, 0x1234)
     assert entity is not None
     assert entity.size(ImageId.ORIG) == 20
 
