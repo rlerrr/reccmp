@@ -167,6 +167,11 @@ def parse_args() -> argparse.Namespace:
         help="Print addresses of recompiled functions too",
     )
     parser.add_argument(
+        "--offset-addresses",
+        action="store_true",
+        help="Display unresolved offset placeholders as <OFFSET0xaddr> instead of numbered placeholders",
+    )
+    parser.add_argument(
         "--silent",
         action="store_true",
         help="Don't display text summary of matches",
@@ -234,7 +239,9 @@ def main() -> int:
 
     logging.basicConfig(level=args.loglevel, format="[%(levelname)s] %(message)s")
 
-    compare = Compare.from_target(target)
+    compare = Compare.from_target(
+        target, use_address_placeholders=args.offset_addresses
+    )
 
     print()
 

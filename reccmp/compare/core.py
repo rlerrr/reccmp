@@ -99,6 +99,7 @@ class Compare:
         code_files: list[TextFile] | None = None,
         data_sources: list[TextFile] | None = None,
         project_aliases: ProjectAliases | None = None,
+        use_address_placeholders: bool = False,
     ):
         self.orig_bin = orig_bin
         self.recomp_bin = recomp_bin
@@ -133,6 +134,7 @@ class Compare:
             self.recomp_bin,
             self.report,
             self.types,
+            use_address_placeholders=use_address_placeholders,
         )
 
     def run(self):
@@ -216,7 +218,9 @@ class Compare:
         match_strings(self._db, self.report)
 
     @classmethod
-    def from_target(cls, target: RecCmpTarget) -> Self:
+    def from_target(
+        cls, target: RecCmpTarget, use_address_placeholders: bool = False
+    ) -> Self:
         origfile = detect_image(filepath=target.original_path)
         recompfile = detect_image(filepath=target.recompiled_path)
 
@@ -259,6 +263,7 @@ class Compare:
             data_sources=data_sources,
             code_files=code_files,
             project_aliases=project_aliases,
+            use_address_placeholders=use_address_placeholders,
         )
         compare.run()
         return compare

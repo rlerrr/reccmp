@@ -74,6 +74,7 @@ class FunctionComparator:
     report: ReccmpReportProtocol
     types: CvdumpTypesParser
     is_32bit: bool = True
+    use_address_placeholders: bool = False
 
     def __post_init__(self):
         self.orig_sanitize = ParseAsm(
@@ -85,6 +86,7 @@ class FunctionComparator:
                 self.types.get_name_for_offset,
             ),
             is_32bit=self.is_32bit,
+            use_address_placeholders=self.use_address_placeholders,
         )
         self.recomp_sanitize = ParseAsm(
             addr_test=create_valid_addr_lookup(
@@ -97,6 +99,7 @@ class FunctionComparator:
                 self.types.get_name_for_offset,
             ),
             is_32bit=self.is_32bit,
+            use_address_placeholders=self.use_address_placeholders,
         )
 
     def _source_ref_of_recomp_addr(self, recomp_addr: int | None) -> str | None:
