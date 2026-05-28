@@ -42,6 +42,16 @@ class ReccmpQueryEvent extends Event {
   }
 }
 
+class ReccmpQueryRegexEvent extends Event {
+  /** @readonly */
+  static eventName = 'setQueryRegex';
+  /** @param {boolean} value */
+  constructor(value) {
+    super(ReccmpQueryRegexEvent.eventName, { bubbles: true, composed: true });
+    this.value = value;
+  }
+}
+
 class ReccmpFilterTypeEvent extends Event {
   /** @readonly */
   static eventName = 'setFilterType';
@@ -138,6 +148,7 @@ export {
   ReccmpPageSizeEvent,
   ReccmpPrevPageEvent,
   ReccmpQueryEvent,
+  ReccmpQueryRegexEvent,
   ReccmpRegisterEvent,
   ReccmpSetPageEvent,
   ReccmpShowRecompEvent,

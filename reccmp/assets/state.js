@@ -70,11 +70,23 @@ function createSortFunction({ sortCol, sortDesc }) {
  * @param {boolean} args.hidePerfect
  * @param {boolean} args.hideStub
  * @param {string} args.query
+ * @param {boolean} args.queryRegex
  * @param {number} args.filterType
  * @returns {(row: ReccmpComparedEntity) => boolean}
  */
-function createFilterFunction({ hidePerfect, hideStub, query, filterType }) {
+function createFilterFunction({ hidePerfect, hideStub, query, queryRegex, filterType }) {
   const queryNormalized = query.toLowerCase().trim();
+  /** @type {(value: string) => boolean} */
+  let queryMatcher = (value) => value.toLowerCase().includes(queryNormalized);
+
+  if (queryRegex && queryNormalized !== '') {
+    try {
+      const regex = new RegExp(query.trim(), 'i');
+      queryMatcher = (value) => regex.test(value);
+    } catch (_err) {
+      queryMatcher = () => false;
+    }
+  }
 
   /**
    * @param {ReccmpComparedEntity} row
@@ -98,7 +110,11 @@ function createFilterFunction({ hidePerfect, hideStub, query, filterType }) {
 
     // Name/addr search
     if (filterType === 1) {
-      return address.includes(queryNormalized) || name.toLowerCase().includes(queryNormalized);
+      if (queryRegex) {
+        return queryMatcher(name);
+      }
+
+      return queryMatcher(address) || queryMatcher(name);
     }
 
     // no diff for review.
@@ -110,7 +126,7 @@ function createFilterFunction({ hidePerfect, hideStub, query, filterType }) {
      * special matcher for combined diff
      * @type {(frag: DiffFragBoth | DiffFragSingle) => boolean}
      */
-    const anyLineMatch = (frag) => frag[1].toLowerCase().trim().includes(queryNormalized);
+    const anyLineMatch = (frag) => queryMatcher(frag[1].trim());
 
     // Flatten all diff groups for the search
     const diffs = diff.flatMap(([_slug, subgroups]) => subgroups);
@@ -175,6 +191,7 @@ class ReccmpState {
 
       // Query text and which fields to search.
       query: '',
+      queryRegex: false,
       filterType: 1,
 
       // Row filtering
@@ -251,6 +268,13 @@ class ReccmpState {
   /** @param {string} query */
   setQuery(query) {
     this.state.query = query;
+    this.updateResults();
+  }
+
+  /** @param {boolean} value */
+  /** @param {boolean} value */
+  setQueryRegex(value) {
+    this.state.queryRegex = value;
     this.updateResults();
   }
 

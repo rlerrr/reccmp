@@ -6,6 +6,7 @@ import {
   ReccmpPageSizeEvent,
   ReccmpPrevPageEvent,
   ReccmpQueryEvent,
+  ReccmpQueryRegexEvent,
   ReccmpRegisterEvent,
   ReccmpSetPageEvent,
   ReccmpShowRecompEvent,
@@ -20,6 +21,7 @@ declare global {
     [ReccmpTableEvent.eventName]: ReccmpTableEvent;
     [ReccmpSetPageEvent.eventName]: ReccmpSetPageEvent;
     [ReccmpQueryEvent.eventName]: ReccmpQueryEvent;
+    [ReccmpQueryRegexEvent.eventName]: ReccmpQueryRegexEvent;
     [ReccmpFilterTypeEvent.eventName]: ReccmpFilterTypeEvent;
     [ReccmpHidePerfectEvent.eventName]: ReccmpHidePerfectEvent;
     [ReccmpHideStubEvent.eventName]: ReccmpHideStubEvent;

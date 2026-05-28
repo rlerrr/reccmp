@@ -43,6 +43,7 @@ export interface ReccmpInternalState {
 
   // Query text and which fields to search.
   query: string;
+  queryRegex: boolean;
   filterType: number;
 
   // Row filtering
