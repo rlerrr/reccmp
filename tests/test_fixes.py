@@ -6,6 +6,44 @@ from reccmp.compare.asm.fixes import (
     patch_fld_fmul,
     patch_mov_compare_jmp,
 )
+from reccmp.compare.asm.const import JUMP_MNEMONICS
+
+
+@pytest.mark.parametrize("mnemonic", sorted(JUMP_MNEMONICS))
+@pytest.mark.parametrize(
+    ("orig_offset", "recomp_offset"), (("0x10", "0x11"), ("-0x10", "-0x11"))
+)
+def test_jump_offset_one_byte_difference_is_effective(
+    mnemonic: str, orig_offset: str, recomp_offset: str
+):
+    orig_asm = [f"{mnemonic} {orig_offset}"]
+    recomp_asm = [f"{mnemonic} {recomp_offset}"]
+
+    diff = difflib.SequenceMatcher(None, orig_asm, recomp_asm)
+
+    assert find_effective_match(diff.get_opcodes(), orig_asm, recomp_asm) is True
+
+
+@pytest.mark.parametrize(
+    "recomp_instruction",
+    ("jmp 0x12", "jmp label", "jmp dword ptr [eax]", "je 0x11"),
+)
+def test_jump_offset_tolerance_rejects_other_differences(recomp_instruction: str):
+    orig_asm = ["jmp 0x10"]
+    recomp_asm = [recomp_instruction]
+
+    diff = difflib.SequenceMatcher(None, orig_asm, recomp_asm)
+
+    assert find_effective_match(diff.get_opcodes(), orig_asm, recomp_asm) is False
+
+
+def test_cmp_operand_swap_allows_one_byte_jump_difference():
+    orig_asm = ["cmp eax, ebx", "jg 0x10"]
+    recomp_asm = ["cmp ebx, eax", "jl 0x11"]
+
+    diff = difflib.SequenceMatcher(None, orig_asm, recomp_asm)
+
+    assert find_effective_match(diff.get_opcodes(), orig_asm, recomp_asm) is True
 
 
 def test_fix_cmp_jmp():

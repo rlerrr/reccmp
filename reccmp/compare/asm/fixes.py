@@ -1,6 +1,7 @@
 import re
 from typing import Sequence
 
+from reccmp.compare.asm.const import JUMP_MNEMONICS
 from reccmp.compare.asm.parse import AsmExcerpt
 from reccmp.compare.pinned_sequences import DiffOpcode
 
@@ -68,6 +69,31 @@ def get_patched_jump(a: str, b: str) -> str:
     return mnemonic_a + " " + operand_b
 
 
+def jump_offset_difference_is_tolerable(a: str, b: str) -> bool:
+    """Whether direct jumps with the same mnemonic differ by exactly one byte."""
+    mnemonic_a, separator_a, operand_a = a.partition(" ")
+    mnemonic_b, separator_b, operand_b = b.partition(" ")
+    if (
+        not separator_a
+        or not separator_b
+        or mnemonic_a != mnemonic_b
+        or mnemonic_a not in JUMP_MNEMONICS
+    ):
+        return False
+
+    try:
+        target_a = int(operand_a, 0)
+        target_b = int(operand_b, 0)
+    except ValueError:
+        return False
+
+    return abs(target_a - target_b) == 1
+
+
+def instructions_match_with_jump_tolerance(a: str, b: str) -> bool:
+    return a == b or jump_offset_difference_is_tolerable(a, b)
+
+
 def patch_mov_cmp_jmp(orig: list[str], recomp: list[str]) -> set[int]:
     return patch_mov_compare_jmp(orig, recomp, "cmp")
 
@@ -118,8 +144,9 @@ def patch_mov_compare_jmp(
         recomp[cmp_index - 1] + recomp[cmp_index]
     ):
         # We only register the fix if the jmp actually matches
-        if orig[cmp_index + 1] == get_patched_jump(
-            orig[cmp_index + 1], recomp[cmp_index + 1]
+        if instructions_match_with_jump_tolerance(
+            orig[cmp_index + 1],
+            get_patched_jump(orig[cmp_index + 1], recomp[cmp_index + 1]),
         ):
             return {0, 1, 2}
     return set()
@@ -228,8 +255,9 @@ def patch_compare_jmp(
     # Are the cmp operands flipped?
     # Is the jump instruction compatible with a flip?
     if is_operand_swap(orig[cmp_index], recomp[cmp_index]):
-        if orig[cmp_index + 1] == get_patched_jump(
-            orig[cmp_index + 1], recomp[cmp_index + 1]
+        if instructions_match_with_jump_tolerance(
+            orig[cmp_index + 1],
+            get_patched_jump(orig[cmp_index + 1], recomp[cmp_index + 1]),
         ):
             return {cmp_index, cmp_index + 1}
     return set()
@@ -319,6 +347,19 @@ def patch_cmp_swaps(
                     break
 
     return fixed_lines
+
+
+def patch_jump_offsets(
+    codes: Sequence[DiffOpcode], orig_asm: list[str], recomp_asm: list[str]
+) -> set[int]:
+    """Accept paired direct jumps whose numeric targets differ by one byte."""
+    return {
+        j
+        for code, i1, i2, j1, j2 in codes
+        if code == "replace"
+        for i, j in zip(range(i1, i2), range(j1, j2))
+        if jump_offset_difference_is_tolerable(orig_asm[i], recomp_asm[j])
+    }
 
 
 def effective_match_possible(orig_asm: list[str], recomp_asm: list[str]) -> bool:
@@ -526,12 +567,14 @@ def find_effective_match(
         already_equal
     )
     relocates = relocate_instructions(codes, orig_asm, recomp_asm)
+    jump_offsets = patch_jump_offsets(codes, orig_asm, recomp_asm)
 
     bad_swaps = bad_register_swaps(naive_swaps, orig_asm, recomp_asm)
 
     corrections = set().union(
         naive_swaps.difference(bad_swaps),
         cmp_swaps,
+        jump_offsets,
         relocates,
     )
 
