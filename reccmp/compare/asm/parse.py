@@ -39,10 +39,12 @@ class ParseAsm:
         addr_test: AddrTestProtocol | None = None,
         name_lookup: NameReplacementProtocol | None = None,
         is_32bit: bool = True,
+        use_address_placeholders: bool = False,
     ) -> None:
         self.addr_test = addr_test
         self.name_lookup = name_lookup
         self.is_32bit = is_32bit
+        self.use_address_placeholders = use_address_placeholders
 
         self.replacements: dict[int, str] = {}
         self.indirect_replacements: dict[int, str] = {}
@@ -75,6 +77,12 @@ class ParseAsm:
         number = len(self.replacements) + len(self.indirect_replacements) + 1
         return f"<OFFSET{number}>" if self.number_placeholders else "<OFFSET>"
 
+    def _placeholder(self, addr: int) -> str:
+        if self.use_address_placeholders:
+            return f"<OFFSET{addr:#x}>"
+
+        return self._next_placeholder()
+
     def replace(self, addr: int, exact: bool = False) -> str:
         """Provide a replacement name for the given address."""
         if addr in self.replacements:
@@ -84,7 +92,7 @@ class ParseAsm:
             self.replacements[addr] = name
             return name
 
-        placeholder = self._next_placeholder()
+        placeholder = self._placeholder(addr)
         self.replacements[addr] = placeholder
         return placeholder
 
@@ -96,7 +104,7 @@ class ParseAsm:
             self.indirect_replacements[addr] = name
             return name
 
-        placeholder = self._next_placeholder()
+        placeholder = self._placeholder(addr)
         self.indirect_replacements[addr] = placeholder
         return placeholder
 

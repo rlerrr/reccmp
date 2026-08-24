@@ -67,6 +67,14 @@ def test_pointer_instructions_deterministic(inst: DisasmLiteTuple):
     assert op_str1 == op_str2
 
 
+def test_pointer_instructions_with_address_placeholder():
+    """Can display the original address in unresolved placeholders."""
+    p = ParseAsm(use_address_placeholders=True)
+    _, op_str = p.sanitize((0x1000, 5, "mov", "eax, [0x1234]"))
+
+    assert op_str == "eax, [<OFFSET0x1234>]"
+
+
 @pytest.mark.parametrize("inst", POINTER_INSTRUCTIONS)
 def test_pointer_instructions_with_name(inst: DisasmLiteTuple):
     """Same as above, but using name lookup and substitution."""
@@ -113,6 +121,17 @@ def test_displacement_with_addr_verify(inst: DisasmLiteTuple):
     addr_test.assert_called_with(0x1234)
     assert "0x1234]" not in op_str
     assert "<OFFSET1>]" in op_str
+
+
+def test_displacement_with_address_placeholder():
+    """Address placeholders also apply to verified displacement addresses."""
+    addr_test = Mock(spec=AddrTestProtocol, return_value=True)
+    p = ParseAsm(addr_test=addr_test, use_address_placeholders=True)
+    _, op_str = p.sanitize(
+        (0x1000, 6, "mov", "eax, dword ptr [ecx + 0x1234]")
+    )
+
+    assert op_str == "eax, dword ptr [ecx + <OFFSET0x1234>]"
 
 
 IMMEDIATE_VALUE_INSTRUCTIONS = (
