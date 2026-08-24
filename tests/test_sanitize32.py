@@ -127,9 +127,7 @@ def test_displacement_with_address_placeholder():
     """Address placeholders also apply to verified displacement addresses."""
     addr_test = Mock(spec=AddrTestProtocol, return_value=True)
     p = ParseAsm(addr_test=addr_test, use_address_placeholders=True)
-    _, op_str = p.sanitize(
-        (0x1000, 6, "mov", "eax, dword ptr [ecx + 0x1234]")
-    )
+    _, op_str = p.sanitize((0x1000, 6, "mov", "eax, dword ptr [ecx + 0x1234]"))
 
     assert op_str == "eax, dword ptr [ecx + <OFFSET0x1234>]"
 
