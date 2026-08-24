@@ -49,6 +49,7 @@ The header on the first line defines the columns used in the file. The only requ
 The address value is always interpreted as a hexadecimal number, even if only digits 0-9 appear. You can use the typical `0x` prefix but it was omitted for this example. The `h` suffix sometimes seen in assembly code is not supported.
 
 The `"name"` field is the name for the entity, as you would expect. `"size"` is the number of bytes used by the entity in virtual memory. This is always interpreted as a decimal number.
+`"orig_size"` is an optional override for function comparison that controls how many bytes are read from the original binary.
 
 `"type"` expects one of these values:
 
@@ -128,6 +129,7 @@ These fields can appear in the CSV file:
 | `address` | Address of the entity. Required. | Hex number with or without `0x` prefix |
 | `name` | Name for the entity (e.g. the fully-qualified function name) | text |
 | `symbol` | Linker name | text |
+| `orig_size` | Optional original-binary function size override used during asm diff | decimal number |
 | `type` | Entity type | one of: `function, template, synthetic, library, stub, global, string, widechar, float, vtable` |
 | `size` | Size of the entity in bytes | Decimal number, or hex number with `0x` prefix |
 

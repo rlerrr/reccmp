@@ -65,6 +65,7 @@ class CsvValuesType(TypedDict):
     type: NotRequired[EntityType]
     name: NotRequired[str]
     size: NotRequired[int]
+    orig_size: NotRequired[int]
     symbol: NotRequired[str]
 
     # Set implicitly via type for now
@@ -145,6 +146,9 @@ def _convert_attrs(values: Iterable[tuple[str, str]]) -> CsvValuesType:
 
         if key == "size":
             output["size"] = decimal_or_hex(value)
+
+        if key == "orig_size":
+            output["orig_size"] = int(value)
 
         if key == "type":
             type_name = value.strip().lower()

@@ -193,7 +193,9 @@ class EntityBatch:
             kwargs["ref_orig" if img == ImageId.ORIG else "ref_recomp"] = ref
 
         if size is not None:
-            kwargs["orig_size" if img == ImageId.ORIG else "recomp_size"] = size
+            kwargs.setdefault(
+                "orig_size" if img == ImageId.ORIG else "recomp_size", size
+            )
 
         if max_size is not None:
             kwargs["orig_max_size" if img == ImageId.ORIG else "recomp_max_size"] = (
