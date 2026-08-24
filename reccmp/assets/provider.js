@@ -8,6 +8,7 @@ import {
   ReccmpPageSizeEvent,
   ReccmpPrevPageEvent,
   ReccmpQueryEvent,
+  ReccmpQueryRegexEvent,
   ReccmpRegisterEvent,
   ReccmpSetPageEvent,
   ReccmpShowRecompEvent,
@@ -75,6 +76,11 @@ class ReccmpProvider extends window.HTMLElement {
 
     this.addEventListener(ReccmpQueryEvent.eventName, (evt) => {
       this.reccmp.setQuery(evt.value);
+      this.callListeners();
+    });
+
+    this.addEventListener(ReccmpQueryRegexEvent.eventName, (evt) => {
+      this.reccmp.setQueryRegex(evt.value);
       this.callListeners();
     });
 
