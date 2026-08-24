@@ -490,6 +490,61 @@ def test_match_static_var(db):
     assert db.get(ImageId.ORIG, 600).recomp_addr == 500
 
 
+def test_match_static_var_c_fallback(db):
+    """Match a static variable using C-mode synthetic symbol format."""
+    with db.batch() as batch:
+        # C-style parent function symbol; not embedded in static variable symbol.
+        batch.set(
+            ImageId.ORIG,
+            200,
+            name="wndproc_HorzListClass",
+            symbol="_wndproc_HorzListClass@16",
+            type=EntityType.FUNCTION,
+        )
+        # Recomp static variable symbol from cvdump analysis.py
+        batch.set(ImageId.RECOMP, 500, symbol="sellprice___wndproc_HorzListClass")
+        batch.set(
+            ImageId.ORIG,
+            600,
+            name="sellprice",
+            parent_function=200,
+            static_var=True,
+            type=EntityType.DATA,
+        )
+
+    match_static_variables(db)
+
+    assert db.get(ImageId.ORIG, 600).recomp_addr == 500
+
+
+def test_match_static_var_prefers_cpp_symbol_match(db):
+    """Prefer the first static variable symbol match in case multiple exist."""
+    with db.batch() as batch:
+        batch.set(
+            ImageId.ORIG,
+            200,
+            name="Tick",
+            symbol="?Tick@IsleApp@@QAEXH@Z",
+            type=EntityType.FUNCTION,
+        )
+        batch.set(
+            ImageId.RECOMP, 500, symbol="?g_startupDelay@?1??Tick@IsleApp@@QAEXH@Z@4HA"
+        )
+        batch.set(ImageId.RECOMP, 501, symbol="g_startupDelay___Tick")
+        batch.set(
+            ImageId.ORIG,
+            600,
+            name="g_startupDelay",
+            parent_function=200,
+            static_var=True,
+            type=EntityType.DATA,
+        )
+
+    match_static_variables(db)
+
+    assert db.get(ImageId.ORIG, 600).recomp_addr == 500
+
+
 def test_match_static_var_no_parent_function(db):
     """Cannot match static variable without a reference to its parent function"""
     with db.batch() as batch:

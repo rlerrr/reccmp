@@ -313,11 +313,22 @@ def match_static_variables(
                 )
                 continue
 
+            matched_addr = None
             for recomp_addr, recomp_sym in symbols.items():
                 if function_symbol in recomp_sym and variable_name in recomp_sym:
-                    batch.match(variable_addr, recomp_addr)
-                    del symbols[recomp_addr]
+                    matched_addr = recomp_addr
                     break
+
+            if matched_addr is None and function_name is not None:
+                fallback_symbol = f"{variable_name}___{function_name}"
+                for recomp_addr, recomp_sym in symbols.items():
+                    if fallback_symbol == recomp_sym:
+                        matched_addr = recomp_addr
+                        break
+
+            if matched_addr is not None:
+                batch.match(variable_addr, matched_addr)
+                del symbols[matched_addr]
             else:
                 report(
                     ReccmpEvent.NO_MATCH,
