@@ -4,6 +4,7 @@ import struct
 from itertools import pairwise
 from typing import Callable, Iterator
 from reccmp.compare.lines import LinesDb
+from reccmp.difflib import DiffOpcode
 from reccmp.compare.pinned_sequences import SequenceMatcherWithPins
 from reccmp.compare.asm.fixes import assert_fixup, find_effective_match
 from reccmp.compare.asm.parse import AsmExcerpt, ParseAsm
@@ -145,8 +146,10 @@ class FunctionComparator:
         except IndexError:
             pass
 
-        orig_combined = self.orig_sanitize.parse_asm(orig_raw, match.orig_addr)
-        recomp_combined = self.recomp_sanitize.parse_asm(recomp_raw, match.recomp_addr)
+        orig_combined = self.orig_sanitize.parse_asm_lines(orig_raw, match.orig_addr)
+        recomp_combined = self.recomp_sanitize.parse_asm_lines(
+            recomp_raw, match.recomp_addr
+        )
 
         # Check for assert calls only if we expect to find them
         if has_asserts(self.orig_bin):
@@ -162,7 +165,9 @@ class FunctionComparator:
         )
 
         return self._compare_function_assembly(
-            orig_combined, recomp_combined, split_points
+            orig_combined,
+            recomp_combined,
+            split_points,
         )
 
     @staticmethod
@@ -188,8 +193,8 @@ class FunctionComparator:
         split_points: list[tuple[int, int]],
     ) -> EntityCompareResult:
         # Detach addresses from asm lines for the text diff.
-        orig_asm = [x[1] for x in orig]
-        recomp_asm = [x[1] for x in recomp]
+        orig_asm = [x.text for x in orig]
+        recomp_asm = [x.text for x in recomp]
 
         diff = SequenceMatcherWithPins(orig_asm, recomp_asm, split_points)
 
@@ -202,34 +207,141 @@ class FunctionComparator:
         else:
             is_effective = False
 
+        base_codes = diff.get_opcodes()
+        encoding_mismatch_notes, encoding_mismatch_pairs = (
+            self._collect_encoding_mismatch_notes(base_codes, orig, recomp)
+        )
+        codes = self._inject_encoding_mismatch_opcodes(
+            base_codes, encoding_mismatch_pairs
+        )
+
         # Convert the addresses to hex string for the diff output
         orig_for_printing = [
-            (hex(addr) if addr is not None else "", instr) for addr, instr in orig
+            (hex(line.address) if line.address is not None else "", line.text)
+            for line in orig
         ]
 
         recomp_for_printing = [
             (
                 hex(addr) if addr is not None else "",
                 self._print_recomp_instruction(
-                    instruction,
+                    instruction + encoding_mismatch_notes.get(line_index, ""),
                     source_ref=self._source_ref_of_recomp_addr(addr),
                     is_pinned=any(
                         recomp_addr == line_index for _, recomp_addr in split_points
                     ),
                 ),
             )
-            for line_index, (addr, instruction) in enumerate(recomp)
+            for line_index, line in enumerate(recomp)
+            for addr, instruction in [(line.address, line.text)]
         ]
 
         return EntityCompareResult(
             diff=RawDiffOutput(
-                codes=diff.get_opcodes(),
+                codes=codes,
                 orig_inst=orig_for_printing,
                 recomp_inst=recomp_for_printing,
             ),
             is_effective_match=is_effective,
             match_ratio=diff.ratio(),
         )
+
+    @staticmethod
+    def _inject_encoding_mismatch_opcodes(
+        codes: list[DiffOpcode], mismatch_pairs: list[tuple[int, int]]
+    ) -> list[DiffOpcode]:
+        """Turn encoding-only mismatches inside equal blocks into explicit replace opcodes."""
+        if len(mismatch_pairs) == 0:
+            return codes
+
+        mismatch_by_orig = dict(mismatch_pairs)
+        patched: list[DiffOpcode] = []
+
+        for code, i1, i2, j1, j2 in codes:
+            if code != "equal":
+                patched.append((code, i1, i2, j1, j2))
+                continue
+
+            cursor_orig = i1
+            cursor_recomp = j1
+            for orig_idx in range(i1, i2):
+                recomp_idx = mismatch_by_orig.get(orig_idx)
+                if recomp_idx is None:
+                    continue
+
+                expected_recomp_idx = j1 + (orig_idx - i1)
+                if recomp_idx != expected_recomp_idx:
+                    continue
+
+                if cursor_orig < orig_idx:
+                    patched.append(
+                        (
+                            "equal",
+                            cursor_orig,
+                            orig_idx,
+                            cursor_recomp,
+                            recomp_idx,
+                        )
+                    )
+
+                patched.append(
+                    (
+                        "replace",
+                        orig_idx,
+                        orig_idx + 1,
+                        recomp_idx,
+                        recomp_idx + 1,
+                    )
+                )
+                cursor_orig = orig_idx + 1
+                cursor_recomp = recomp_idx + 1
+
+            if cursor_orig < i2:
+                patched.append(("equal", cursor_orig, i2, cursor_recomp, j2))
+
+        return patched
+
+    @staticmethod
+    def _collect_encoding_mismatch_notes(
+        codes: list[DiffOpcode], orig_asm: AsmExcerpt, recomp_asm: AsmExcerpt
+    ) -> tuple[dict[int, str], list[tuple[int, int]]]:
+        """Find "equal" instruction lines that decode the same but use different encodings."""
+        notes: dict[int, str] = {}
+        mismatch_pairs: list[tuple[int, int]] = []
+        for code, i1, i2, j1, j2 in codes:
+            if code != "equal":
+                continue
+
+            common_length = min(i2 - i1, j2 - j1)
+            for i in range(common_length):
+                orig_idx = i1 + i
+                recomp_idx = j1 + i
+                orig_line = orig_asm[orig_idx]
+                recomp_line = recomp_asm[recomp_idx]
+                if (
+                    orig_line.raw_bytes is None
+                    or recomp_line.raw_bytes is None
+                    or orig_line.raw_bytes == recomp_line.raw_bytes
+                    # Ignore anyway if the encoding is the same length
+                    # Otherwise gets very noisy if the binaries aren't perfectly aligned!
+                    or len(orig_line.raw_bytes) == len(recomp_line.raw_bytes)
+                ):
+                    continue
+
+                # Only flag when capstone decode matches exactly and raw encoding differs.
+                if (
+                    orig_line.mnemonic != recomp_line.mnemonic
+                    or orig_line.op_str != recomp_line.op_str
+                ):
+                    continue
+
+                mismatch_pairs.append((orig_idx, recomp_idx))
+                notes[recomp_idx] = (
+                    f" [enc {orig_line.raw_bytes.hex(' ')} ->"
+                    f" {recomp_line.raw_bytes.hex(' ')}]"
+                )
+
+        return notes, mismatch_pairs
 
     def _collect_line_annotations(self, recomp: AsmExcerpt) -> list[ReccmpMatch]:
         """
@@ -239,8 +351,8 @@ class FunctionComparator:
         if len(recomp) == 0:
             return []
 
-        recomp_start_addr = recomp[0][0]
-        recomp_end_addr = recomp[-1][0]
+        recomp_start_addr = recomp[0].address
+        recomp_end_addr = recomp[-1].address
         assert recomp_start_addr is not None and recomp_end_addr is not None
         line_annotations = self.db.get_lines_in_recomp_range(
             recomp_start_addr, recomp_end_addr
@@ -300,7 +412,7 @@ class FunctionComparator:
                 (
                     i
                     for i, entry in enumerate(orig)
-                    if entry[0] == line_annotation.orig_addr
+                    if entry.address == line_annotation.orig_addr
                 ),
                 None,
             )
@@ -316,7 +428,7 @@ class FunctionComparator:
                 (
                     i
                     for i, entry in enumerate(recomp)
-                    if entry[0] == line_annotation.recomp_addr
+                    if entry.address == line_annotation.recomp_addr
                 ),
                 None,
             )

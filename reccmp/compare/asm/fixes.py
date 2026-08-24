@@ -584,10 +584,10 @@ def find_effective_match(
 def assert_fixup(asm: AsmExcerpt):
     """Detect assert calls and replace the code filename and line number
     values with macros (from assert.h)."""
-    for i, (_, line) in enumerate(asm):
-        if "_assert" in line and line.startswith("call"):
+    for i, line in enumerate(asm):
+        if "_assert" in line.text and line.text.startswith("call"):
             try:
-                asm[i - 3] = (asm[i - 3][0], "push __LINE__")
-                asm[i - 2] = (asm[i - 2][0], "push __FILE__")
+                asm[i - 3].text = "push __LINE__"
+                asm[i - 2].text = "push __FILE__"
             except IndexError:
                 continue

@@ -169,6 +169,65 @@ def test_simple_nontrivial_diff(
     ]
 
 
+def test_encoding_mismatch_note_on_equal_instruction(
+    db: EntityDb, lines_db: LinesDb, report: ReccmpReportProtocol
+):
+    # shr eax, 1 (2-byte encoding)
+    orig = b"\xd1\xe8\x83\xc0\x01"
+    # shr eax, 1 (3-byte encoding), then a different add immediate to force a visible diff block
+    recm = b"\xc1\xe8\x01\x83\xc0\x02"
+
+    diffreport = compare_functions(db, lines_db, orig, recm, report)
+
+    assert diffreport.match_ratio < 1.0
+    assert diffreport.diff.codes == [
+        ("replace", 0, 1, 0, 1),
+        ("replace", 1, 2, 1, 2),
+    ]
+    assert diffreport.diff.orig_inst == [
+        ("0x200", "shr eax, 1"),
+        ("0x202", "add eax, 1"),
+    ]
+    assert diffreport.diff.recomp_inst == [
+        ("0x400", "shr eax, 1 [enc d1 e8 -> c1 e8 01]"),
+        ("0x403", "add eax, 2"),
+    ]
+
+
+def test_encoding_mismatch_only_still_emits_diff_opcode(
+    db: EntityDb, lines_db: LinesDb, report: ReccmpReportProtocol
+):
+    # Same decoded instruction, different machine-code encoding.
+    orig = b"\xd1\xe8"  # shr eax, 1 (2-byte form)
+    recm = b"\xc1\xe8\x01"  # shr eax, 1 (3-byte form)
+
+    diffreport = compare_functions(db, lines_db, orig, recm, report)
+
+    # Textual asm still matches, but we intentionally surface an encoding-only diff.
+    assert diffreport.match_ratio == 1.0
+    assert diffreport.diff.codes == [("replace", 0, 1, 0, 1)]
+    assert diffreport.diff.orig_inst == [("0x200", "shr eax, 1")]
+    assert diffreport.diff.recomp_inst == [
+        ("0x400", "shr eax, 1 [enc d1 e8 -> c1 e8 01]")
+    ]
+
+
+def test_encoding_mismatch_same_byte_length_is_ignored(
+    db: EntityDb, lines_db: LinesDb, report: ReccmpReportProtocol
+):
+    # Both are 5-byte relative calls; targets differ but are sanitized to placeholders.
+    # This confirms same-size encoding differences do not become synthetic "enc" diffs.
+    orig = b"\xe8\x10\x00\x00\x00"
+    recm = b"\xe8\x20\x00\x00\x00"
+
+    diffreport = compare_functions(db, lines_db, orig, recm, report)
+
+    assert diffreport.match_ratio == 1.0
+    assert diffreport.diff.codes == [("equal", 0, 1, 0, 1)]
+    assert diffreport.diff.orig_inst == [("0x200", "call <OFFSET1>")]
+    assert diffreport.diff.recomp_inst == [("0x400", "call <OFFSET1>")]
+
+
 # Based on BETA10 0x1013e673
 LINE_MISMATCH_EXAMPLE_ORIG = (
     b"+\xc8If\x89M\xd8\xe9\xd1\x01\x00\x00\xe9\x0e\x00\x00\x00\x0f\xbfE\xe8\x0f\xbfM\xd8\x03\xc1f\x89E\xd8\x8bE\xecf\x8b\x00f\x89E\xe8\x83E\xec\x02\x0f\xbfE\xe8\x85\xc0\x0f"
