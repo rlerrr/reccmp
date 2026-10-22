@@ -2,6 +2,7 @@ import logging
 import difflib
 import struct
 from itertools import zip_longest
+from pathlib import Path
 from typing import Callable, Iterator
 from typing_extensions import Self
 from reccmp.project.detect import RecCmpTarget
@@ -17,6 +18,7 @@ from reccmp.formats import (
     detect_image,
 )
 from reccmp.cvdump import Cvdump, CvdumpTypesParser, CvdumpAnalysis
+from reccmp.dwarf import DwarfAnalysis, parse_dwarf_file
 from reccmp.types import EntityType, ImageId
 from reccmp.compare.event import (
     ReccmpReportProtocol,
@@ -70,13 +72,21 @@ from .verify import (
 
 logger = logging.getLogger(__name__)
 
+# File extensions that identify a DWARF-format debug sidecar
+# (e.g. from `objcopy --only-keep-debug`) rather than an MSVC PDB.
+_DWARF_SUFFIXES = frozenset((".dbg", ".dwarf"))
+
+
+def _is_dwarf_sidecar(path) -> bool:
+    return Path(path).suffix.lower() in _DWARF_SUFFIXES
+
 
 class Compare:
     # pylint: disable=too-many-instance-attributes
     _db: EntityDb
     _lines_db: LinesDb
     code_files: list[TextFile]
-    cvdump_analysis: CvdumpAnalysis
+    cvdump_analysis: CvdumpAnalysis | DwarfAnalysis
     orig_bin: Image
     recomp_bin: Image
     report: ReccmpReportProtocol
@@ -88,23 +98,29 @@ class Compare:
     data_sources: list[TextFile]
     project_aliases: ProjectAliases
 
+    # Only set for the debug-data self-comparison mode (see
+    # `debug_entities_on_both_sides`).
+    _debug_both_sides: bool = False
+
     # pylint: disable=too-many-arguments
     # pylint: disable=too-many-positional-arguments
     def __init__(
         self,
         orig_bin: Image,
         recomp_bin: Image,
-        pdb_file: CvdumpAnalysis,
+        pdb_file: CvdumpAnalysis | DwarfAnalysis,
         target_id: str,
         encoding: str | None = None,
         code_files: list[TextFile] | None = None,
         data_sources: list[TextFile] | None = None,
         project_aliases: ProjectAliases | None = None,
+        debug_entities_on_both_sides: bool = False,
     ):
         self.orig_bin = orig_bin
         self.recomp_bin = recomp_bin
         self.cvdump_analysis = pdb_file
         self.target_id = target_id
+        self._debug_both_sides = debug_entities_on_both_sides
         self.src_encoding = encoding or "utf-8"
         self.bin_encoding = encoding or "latin1"
         self.project_aliases = normalize_project_aliases(project_aliases or {})
@@ -192,6 +208,11 @@ class Compare:
         # The tasks are ordered roughly according to the principle
         # of highest-to-lowest confidence of data validity.
         load_cvdump_types(self.cvdump_analysis, self.types)
+        if self._debug_both_sides:
+            # Debug-data self-comparison (e.g. validating DWARF ingestion):
+            # populate both sides of the entity database from the same
+            # analysis so that the debug data can be cross-matched.
+            load_cvdump(self.cvdump_analysis, self._db, self.orig_bin, ImageId.ORIG)
         load_cvdump(self.cvdump_analysis, self._db, self.recomp_bin)
         load_cvdump_lines(self.cvdump_analysis, self._lines_db, self.recomp_bin)
 
@@ -268,17 +289,22 @@ class Compare:
         recompfile = detect_image(filepath=target.recompiled_path)
 
         logger.info("Parsing %s ...", target.recompiled_pdb)
-        cvdump = (
-            Cvdump(str(target.recompiled_pdb))
-            .lines()
-            .globals()
-            .publics()
-            .symbols()
-            .section_contributions()
-            .types()
-            .run()
-        )
-        pdb_file = CvdumpAnalysis(cvdump)
+        pdb_file: CvdumpAnalysis | DwarfAnalysis
+        if _is_dwarf_sidecar(target.recompiled_pdb):
+            assert isinstance(recompfile, PEImage)
+            pdb_file = parse_dwarf_file(target.recompiled_pdb, recompfile)
+        else:
+            cvdump = (
+                Cvdump(str(target.recompiled_pdb))
+                .lines()
+                .globals()
+                .publics()
+                .symbols()
+                .section_contributions()
+                .types()
+                .run()
+            )
+            pdb_file = CvdumpAnalysis(cvdump)
 
         code_paths = source_code_search(target.source_paths)
         code_files = list(

@@ -35,7 +35,12 @@ def load_cvdump_types(cvdump_analysis: CvdumpAnalysis, types: CvdumpTypesParser)
     types.alerted_types = cvdump_analysis.types.alerted_types
 
 
-def load_cvdump(cvdump_analysis: CvdumpAnalysis, db: EntityDb, recomp_bin: PEImage):
+def load_cvdump(
+    cvdump_analysis: CvdumpAnalysis,
+    db: EntityDb,
+    recomp_bin: PEImage,
+    image_id: ImageId = ImageId.RECOMP,
+):
     # Build the list of entries to insert to the DB.
     # In the rare case we have duplicate symbols for an address, ignore them.
     seen_addrs = set()
@@ -88,7 +93,7 @@ def load_cvdump(cvdump_analysis: CvdumpAnalysis, db: EntityDb, recomp_bin: PEIma
                 # the string reading function will read until it hits the null-terminator.
 
                 batch.set(
-                    ImageId.RECOMP,
+                    image_id,
                     addr,
                     type=sym.node_type,
                     symbol=sym.decorated_name,
@@ -99,7 +104,7 @@ def load_cvdump(cvdump_analysis: CvdumpAnalysis, db: EntityDb, recomp_bin: PEIma
                 # Leave the entity name blank to start. (Don't use the symbol.)
                 # We will read the float's value from the binary.
                 batch.set(
-                    ImageId.RECOMP,
+                    image_id,
                     addr,
                     type=sym.node_type,
                     symbol=sym.decorated_name,
@@ -108,7 +113,7 @@ def load_cvdump(cvdump_analysis: CvdumpAnalysis, db: EntityDb, recomp_bin: PEIma
             else:
                 # Non-string entities.
                 batch.set(
-                    ImageId.RECOMP,
+                    image_id,
                     addr,
                     type=sym.node_type,
                     name=sym.name(),
@@ -119,7 +124,7 @@ def load_cvdump(cvdump_analysis: CvdumpAnalysis, db: EntityDb, recomp_bin: PEIma
                 # Set the cvdump type key so it can be referenced later.
                 if sym.node_type == EntityType.DATA and sym.data_type is not None:
                     assert isinstance(sym.data_type.key, int)
-                    batch.set(ImageId.RECOMP, addr, data_type=sym.data_type.key)
+                    batch.set(image_id, addr, data_type=sym.data_type.key)
 
 
 def load_cvdump_lines(
