@@ -37,6 +37,14 @@ class EntityIndex:
 
         return value
 
+    def pop_value(self, key: str, value: int) -> int:
+        values = self._dict[key]
+        values.remove(value)
+        if len(values) == 0:
+            del self._dict[key]
+
+        return value
+
 
 def match_symbols(
     db: EntityDb,
@@ -101,6 +109,7 @@ def match_functions(
 ):
     # addr->symbol map. Used later in error message for non-unique match.
     recomp_symbols: dict[int, str] = {}
+    recomp_sizes: dict[int, int | None] = {}
 
     name_index = EntityIndex()
 
@@ -122,6 +131,7 @@ def match_functions(
 
         assert ent.recomp_addr is not None
         name_index.add(name, ent.recomp_addr)
+        recomp_sizes[ent.recomp_addr] = ent.get("recomp_size")
 
         # Get the symbol for the error message later.
         if symbol is not None:
@@ -148,13 +158,55 @@ def match_functions(
                 name = name[:255]
 
             if name in name_index:
-                recomp_addr = name_index.pop(name)
-                # If match was not unique
-                if name in name_index:
+                candidates = name_index.get(name)
+                orig_size = ent.get("orig_size")
+                mapping = ent.get("mapping")
+                explicit_matches = []
+                if isinstance(mapping, str) and (
+                    mapping.startswith("public COFF entry ")
+                    or mapping.startswith("rebuilt entry ")
+                ):
+                    try:
+                        explicit_addr = int(mapping.rsplit(" ", 1)[1], 16)
+                    except ValueError:
+                        explicit_addr = None
+                    if explicit_addr in candidates:
+                        explicit_matches = [explicit_addr]
+                symbol_matches = [
+                    candidate
+                    for candidate in candidates
+                    if recomp_symbols.get(candidate) in (name, f"_{name}")
+                ]
+                size_matches = [
+                    candidate
+                    for candidate in candidates
+                    if orig_size is not None and recomp_sizes.get(candidate) == orig_size
+                ]
+                matched_by_explicit_address = len(explicit_matches) == 1
+                matched_by_symbol = len(symbol_matches) == 1
+                matched_by_size = len(size_matches) == 1
+                if matched_by_explicit_address:
+                    recomp_addr = name_index.pop_value(name, explicit_matches[0])
+                elif matched_by_symbol:
+                    recomp_addr = name_index.pop_value(name, symbol_matches[0])
+                elif matched_by_size:
+                    recomp_addr = name_index.pop_value(name, size_matches[0])
+                else:
+                    recomp_addr = name_index.pop(name)
+
+                matched_with_metadata = (
+                    matched_by_explicit_address or matched_by_symbol or matched_by_size
+                )
+
+                # If match was not unique and could not be disambiguated by
+                # the public symbol or compiler-emitted range size, retain the
+                # legacy warning.
+                if not matched_with_metadata and name in name_index:
                     non_unique_names.add(name)
 
-                # If this name was ever matched non-uniquely
-                if name in non_unique_names:
+                # If this name was ever matched non-uniquely without metadata
+                # disambiguation, report it as before.
+                if not matched_with_metadata and name in non_unique_names:
                     matched_symbol = recomp_symbols.get(recomp_addr, "None")
                     other_symbols = [
                         recomp_symbols.get(recomp_addr, "None")

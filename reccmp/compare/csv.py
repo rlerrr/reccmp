@@ -66,6 +66,7 @@ class CsvValuesType(TypedDict):
     name: NotRequired[str]
     size: NotRequired[int]
     symbol: NotRequired[str]
+    mapping: NotRequired[str]
 
     # Set implicitly via type for now
     stub: NotRequired[bool]
@@ -139,6 +140,9 @@ def _convert_attrs(values: Iterable[tuple[str, str]]) -> CsvValuesType:
 
         if key == "symbol":
             output["symbol"] = value
+
+        if key == "mapping":
+            output["mapping"] = value
 
         if key == "name":
             output["name"] = value
